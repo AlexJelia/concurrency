@@ -1,11 +1,16 @@
 package course.concurrency.m2_async.minPrice;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Set;
+import java.util.concurrent.*;
 
 public class PriceAggregator {
 
     private PriceRetriever priceRetriever = new PriceRetriever();
+
+    private ExecutorService executor = Executors.newCachedThreadPool();
 
     public void setPriceRetriever(PriceRetriever priceRetriever) {
         this.priceRetriever = priceRetriever;
@@ -18,7 +23,29 @@ public class PriceAggregator {
     }
 
     public double getMinPrice(long itemId) {
-        // place for your code
-        return 0;
+        try {
+            List<Callable<Double>> tasks = new ArrayList<>(shopIds.size());
+            for (Long shopId : shopIds) {
+                tasks.add(() -> priceRetriever.getPrice(itemId, shopId));
+            }
+            return executor.invokeAll(tasks, 2900, TimeUnit.MILLISECONDS).stream()
+                    .map(f -> {
+                        try {
+                            return f.get();
+                        } catch (InterruptedException | ExecutionException ex) {
+                            System.out.printf("Thread %s was interrupted while future.get().%n", Thread.currentThread().getName());
+                            Thread.currentThread().interrupt();
+                            return Double.NaN;
+                        } catch (CancellationException e) {
+                            return Double.NaN;
+                        }
+                    })
+                    .min(Double::compare)
+                    .orElse(Double.NaN);
+        } catch (InterruptedException e) {
+            System.out.printf("Thread %s was interrupted while invokeAll.%n", Thread.currentThread().getName());
+            Thread.currentThread().interrupt();
+            return Double.NaN;
+        }
     }
 }
