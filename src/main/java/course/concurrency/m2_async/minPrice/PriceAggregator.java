@@ -23,29 +23,21 @@ public class PriceAggregator {
     }
 
     public double getMinPrice(long itemId) {
-        try {
-            List<Callable<Double>> tasks = new ArrayList<>(shopIds.size());
-            for (Long shopId : shopIds) {
-                tasks.add(() -> priceRetriever.getPrice(itemId, shopId));
-            }
-            return executor.invokeAll(tasks, 2900, TimeUnit.MILLISECONDS).stream()
-                    .map(f -> {
-                        try {
-                            return f.get();
-                        } catch (InterruptedException | ExecutionException ex) {
-                            System.out.printf("Thread %s was interrupted while future.get().%n", Thread.currentThread().getName());
-                            Thread.currentThread().interrupt();
-                            return Double.NaN;
-                        } catch (CancellationException e) {
-                            return Double.NaN;
-                        }
-                    })
-                    .min(Double::compare)
-                    .orElse(Double.NaN);
-        } catch (InterruptedException e) {
-            System.out.printf("Thread %s was interrupted while invokeAll.%n", Thread.currentThread().getName());
-            Thread.currentThread().interrupt();
-            return Double.NaN;
-        }
+        List<CompletableFuture<Double>> tasks = shopIds.stream()
+                .map(
+                        shopId ->
+                                CompletableFuture.supplyAsync(() -> priceRetriever.getPrice(itemId, shopId), executor)
+                                        .exceptionally(ex -> {
+                                            System.out.println("Error occurred: " + ex.getMessage());
+                                            return Double.NaN;
+                                        })
+                                        .completeOnTimeout(Double.NaN, 2950, TimeUnit.MILLISECONDS)
+                )
+                .toList();
+        return tasks.stream()
+                .mapToDouble(CompletableFuture::join)
+                .filter(d -> !Double.isNaN(d))
+                .min()
+                .orElse(Double.NaN);
     }
 }
