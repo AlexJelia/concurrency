@@ -27,16 +27,16 @@ public class PriceAggregator {
                 .map(
                         shopId ->
                                 CompletableFuture.supplyAsync(() -> priceRetriever.getPrice(itemId, shopId), executor)
+                                        .completeOnTimeout(Double.NaN, 2950, TimeUnit.MILLISECONDS)
                                         .exceptionally(ex -> {
                                             System.out.println("Error occurred: " + ex.getMessage());
                                             return Double.NaN;
                                         })
-                                        .completeOnTimeout(Double.NaN, 2950, TimeUnit.MILLISECONDS)
                 )
                 .toList();
         return tasks.stream()
                 .mapToDouble(CompletableFuture::join)
-                .filter(d -> !Double.isNaN(d))
+                .filter(Double::isFinite)
                 .min()
                 .orElse(Double.NaN);
     }
