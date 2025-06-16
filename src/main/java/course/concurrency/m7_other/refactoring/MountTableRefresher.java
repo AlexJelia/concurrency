@@ -2,22 +2,18 @@ package course.concurrency.m7_other.refactoring;
 
 import static course.concurrency.m7_other.refactoring.Others.*;
 
-import java.util.concurrent.CountDownLatch;
-
-public class MountTableRefresherThread extends Thread {
-
-    private boolean success;
+public class MountTableRefresher {
+    //Поле isDone устанавливается одним потоком, а читается впоследствии другим.
+    //Чтобы другой поток прочитал актуальное значение, у поля должен быть модификатор volatile
+    private volatile boolean success;
     /** Admin server on which refreshed to be invoked. */
     private String adminAddress;
-    private CountDownLatch countDownLatch;
     private MountTableManager manager;
 
-    public MountTableRefresherThread(MountTableManager manager,
-                                     String adminAddress) {
+    public MountTableRefresher(MountTableManager manager,
+                               String adminAddress) {
         this.manager = manager;
         this.adminAddress = adminAddress;
-        setName("MountTableRefresh_" + adminAddress);
-        setDaemon(true);
     }
 
     /**
@@ -32,13 +28,8 @@ public class MountTableRefresherThread extends Thread {
      * cache locally it need not to make RPC call. But R1 will make RPC calls to
      * update cache on R2 and R3.
      */
-    @Override
     public void run() {
-        try {
-            success = manager.refresh();
-        } finally {
-            countDownLatch.countDown();
-        }
+        success = manager.refresh();
     }
 
     /**
@@ -46,10 +37,6 @@ public class MountTableRefresherThread extends Thread {
      */
     public boolean isSuccess() {
         return success;
-    }
-
-    public void setCountDownLatch(CountDownLatch countDownLatch) {
-        this.countDownLatch = countDownLatch;
     }
 
     @Override
